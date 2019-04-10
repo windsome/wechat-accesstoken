@@ -1,0 +1,15 @@
+{
+  "name": "公众号名称描述,如:小倍软件服务号",
+
+  "env": "<mp>或<open>",
+  "origin": "<你的公众号origin,暂无用处>",
+  "appId": "<your_appId>",
+  "appSecret": "<your_appSecret>",
+
+  "token": "<your_token加密用>",
+  "encodingAESKey": "<your_encodingAESKey消息加密用>",
+  "backend": {
+    "type": "存储端蕾西:<redis>",
+    "url": "存储URL,不同类型配置不同"
+  }
+}

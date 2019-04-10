@@ -1,0 +1,13 @@
+{
+  "name": "wx-access-token",
+  "version": "1.0.0",
+  "description": "access-token服务器,用于实时获取并更新access-token",
+  "title": "API:access-token服务器",
+  "url" : "http://open.qingshansi.cn",
+  "sampleUrl": "http://localhost:3010",
+  "forceLanguage":"zh-cn",
+  "template": {
+    "withCompare": true,
+    "withGenerator": true
+  }
+}

@@ -1,0 +1,47 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: wechat-accesstoken
+  name: wechat-accesstoken
+  namespace: default
+spec:
+  ports:
+  - name: wechat-accesstoken-port-80
+    port: 80
+    targetPort: 3310
+    protocol: TCP
+  selector:
+    k8s-app: wechat-accesstoken
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: wechat-accesstoken
+  name: wechat-accesstoken
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: wechat-accesstoken
+  template:
+    metadata:
+      labels:
+        k8s-app: wechat-accesstoken
+      name: wechat-accesstoken
+    spec:
+      containers:
+      - image: windsome/wechat-accesstoken:latest
+        name: wechat-accesstoken
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: config-volume
+          mountPath: /data/wechat-accesstoken/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: wechat-accesstoken-cm
