@@ -3,8 +3,8 @@ const debug = _debug('app:apiMp');
 import _ from 'lodash';
 import Errcode, { EC } from '../Errcode';
 import CommonRouterFix from './commonRouter';
-import RedisCache from '../utils/redisCacheV2';
-import WxmpApi from '../lib/wxmp_api';
+import MpAuth from '../lib/mpAuth';
+import createBackend from '../lib/backend';
 
 /**
  * redis: {
@@ -22,10 +22,11 @@ export default class Apis {
 
   init = () => {
 
-    let url = this.cfg && this.cfg.backend && this.cfg.backend.url;
-    this.redisCache = new RedisCache(url);
+    this.backend = createBackend(this.cfg.backend);
+    // let url = this.cfg && this.cfg.backend && this.cfg.backend.url;
+    // this.redisCache = new RedisCache(url);
 
-    this.wxmpApi = new WxmpApi(this.cfg);
+    this.mpAuth = new MpAuth(this.cfg);
     debug('init wxmp');
   };
 
@@ -76,13 +77,12 @@ export default class Apis {
     let needRefresh = true;
     // debug('getAccessTokenMp', { force, needRefresh, appid, n: force == true });
 
-    let authorization_info = await this.redisCache.getJsonAsync(
-      'mp_appid_' + appid
-    );
+    let accessTokenInfo = await this.backend.mget('accessTokenMp', appid);
+
     if (!force) {
       // 判断appid对应的info是否过期
-      if (authorization_info) {
-        let { expires_in, updatedAt } = authorization_info;
+      if (accessTokenInfo) {
+        let { expires_in, updatedAt } = accessTokenInfo;
         let expired =
           new Date(updatedAt).getTime() + expires_in * 1000 - 600000;
         let current = new Date();
@@ -93,11 +93,11 @@ export default class Apis {
       }
     }
     if (!needRefresh) {
-      ctx.body = { token: authorization_info.access_token };
+      ctx.body = { token: accessTokenInfo.access_token };
       return;
     }
 
-    let result = await this.wxmpApi.token(appid, this.cfg.appSecret);
+    let result = await this.mpAuth.token(appid, this.cfg.appSecret);
     if (!result) {
       throw new Errcode('api token fail!', EC.ERR_3RD_API_FAIL);
     }
@@ -107,14 +107,14 @@ export default class Apis {
         EC.ERR_3RD_API_FAIL
       );
     }
-    authorization_info = {
+    accessTokenInfo = {
       createdAt: new Date(),
-      ...authorization_info,
+      ...accessTokenInfo,
       ...result,
       updatedAt: new Date()
     };
-    await this.redisCache.setJsonAsync('mp_appid_' + appid, authorization_info);
-    debug('getAccessTokenMp:', authorization_info);
-    ctx.body = { token: authorization_info.access_token };
+    await this.backend.mset('accessTokenMp', appid, accessTokenInfo)
+    debug('getAccessTokenMp:', accessTokenInfo);
+    ctx.body = { token: accessTokenInfo.access_token };
   };
 }

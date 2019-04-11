@@ -3,10 +3,11 @@ const debug = _debug('app:apiWxOpen');
 import _ from 'lodash';
 import Errcode, { EC } from '../Errcode';
 import CommonRouterFix from './commonRouter';
-import RedisCache from '../utils/redisCacheV2';
+// import RedisCache from '../utils/redisCacheV2';
+import createBackend from '../lib/backend';
 import parseUserAgent from '../utils/userAgent';
-import WxopenMsg from '../lib/wxopen_message';
-import WxopenApi from '../lib/wxopen_api';
+import WxopenMsg from '../lib/openMessage';
+import WxopenApi from '../lib/openAuth';
 
 /**
  * redis 布局:
@@ -21,11 +22,11 @@ export default class Apis {
   constructor(app, cfg = {}) {
     this.app = app;
     this.cfg = cfg;
-    this._access_token = null;
-    this._pre_auth_code = null;
+    // this._access_token = null;
+    // this._pre_auth_code = null;
 
-    let url = cfg && cfg.backend && cfg.backend.url;
-    this.redisCache = new RedisCache(url);
+    // let url = cfg && cfg.backend && cfg.backend.url;
+    // this.redisCache = new RedisCache(url);
 
     this.init();
     this.registerServices();
@@ -33,6 +34,8 @@ export default class Apis {
 
   init = () => {
     debug('init wx open');
+    this.backend = createBackend(this.cfg.backend);
+
     this.wxopen = new WxopenMsg({
       token: this.cfg.token,
       appid: this.cfg.appId,
@@ -47,7 +50,7 @@ export default class Apis {
     let prefix = '/apis/v1/wx/open1';
     let router = require('koa-router')({ prefix });
     router.post('/event', this.authEvent);
-    router.get('/authurl', this.getAuthUrl);
+    router.all('/authurl', this.getAuthUrl);
     router.get('/mpinfo', this.getInfoByAuthCode);
     router.get('/access_token/:APPID', this.getAccessToken);
     router.post('/:APPID/callback', this.mpCallback);
@@ -73,7 +76,7 @@ export default class Apis {
     if (result) {
       switch (result.InfoType) {
         case 'component_verify_ticket': // 每10分钟收到微信推送component_verify_ticket协议
-          await this.updateComponentTicket(result);
+          await this.updateComponentTicketCache(result);
           break;
         case 'authorized': // （授权成功通知）
           break;
@@ -110,11 +113,16 @@ export default class Apis {
   };
 
   /**
-   * @api {GET} /apis/v1/wx/open1/authurl 获取认证url
+   * @api {GET|POST} /apis/v1/wx/open1/authurl 获取认证url
    * @apiDescription 给公众号管理员授权开放平台权限.
    * @apiName getAuthUrl
    * @apiGroup wxopen
    * @apiVersion 1.0.0
+   * @apiParamExample {json} Request-Example:
+   * {
+   *  type: '<scancode>或<mobile>' //默认为mobile
+   *  redirectUri // 授权确认页面
+   * }
    * @apiSuccessExample {json} Success-Response:
    * HTTP/1.1 200 OK
    * {
@@ -127,8 +135,18 @@ export default class Apis {
     // 1. 获取ComponentVerifyTicket
     // 2. 获取第三方平台component_access_token
     // 3. 获取预授权码pre_auth_code
-    // 4. 获取URL
-    let agent = parseUserAgent(ctx.request.header['user-agent']);
+    // 4. 获取URL(scancode模式或者mobile模式)
+    let args = { ...ctx.request.query, ...ctx.request.body};
+    let { type, redirectUri } = args;
+    if (!type) {
+      let agent = parseUserAgent(ctx.request.header['user-agent']);
+      if (agent.wechat) {
+        type = 'mobile';
+      }
+    }
+    if (!redirectUri) {
+      redirectUri = 'http://open1.qingshansi.cn/open/code';
+    }
 
     let token = await this.getComponentAccessToken();
     if (!token) {
@@ -153,16 +171,10 @@ export default class Apis {
     let expires_in = result.expires_in;
     let url = null;
 
-    if (agent.wechat) {
-      url = this.wxopenApi.get_auth_url_mobile(
-        pre_auth_code,
-        'http://open1.qingshansi.cn/open/code'
-      );
+    if (type === 'mobile') {
+      url = this.wxopenApi.get_auth_url_mobile(pre_auth_code, redirectUri);
     } else {
-      url = this.wxopenApi.get_auth_url_scancode(
-        pre_auth_code,
-        'http://open1.qingshansi.cn/open/code'
-      );
+      url = this.wxopenApi.get_auth_url_scancode(pre_auth_code, redirectUri);
     }
     ctx.body = {
       url,
@@ -196,15 +208,19 @@ export default class Apis {
   getInfoByAuthCode = async (ctx, next) => {
     let { auth_code, expires_in } = ctx.request.query;
     if (!auth_code) {
-      throw new Errcode('error! auth_code is null', EC.ERR_PARAM_ERROR);
+      throw new Errcode('error! auth_code is null!', EC.ERR_PARAM_ERROR);
     }
-    let authorizer_appid = await this.redisCache.getAsync(
-      'auth_code_' + auth_code
-    );
+
+    let authCodeInfo = await this.backend.mget('authCode', auth_code);
+    let authorizer_appid = authCodeInfo && authCodeInfo.appid;
+    // let authorizer_appid = await this.redisCache.getAsync(
+    //   'auth_code_' + auth_code
+    // );
     if (authorizer_appid) {
-      let authorization_info = await this.redisCache.getJsonAsync(
-        'authorizer_appid_' + authorizer_appid
-      );
+      let authorization_info = await this.backend.mget('authorizerAppidInfo', authorizer_appid);
+      // let authorization_info = await this.redisCache.getJsonAsync(
+      //   'authorizer_appid_' + authorizer_appid
+      // );
       if (authorization_info) {
         debug('already exist! read ' + authorizer_appid + ' from redis!');
         ctx.body = authorization_info;
@@ -232,16 +248,18 @@ export default class Apis {
 
     let authorization_info = result.authorization_info;
     authorizer_appid = authorization_info.authorizer_appid;
-    await this.redisCache.setAsync('auth_code_' + auth_code, authorizer_appid);
+    await this.backend.mset('authCode', auth_code, {appid: authorizer_appid});
+    // await this.redisCache.setAsync('auth_code_' + auth_code, authorizer_appid);
     authorization_info = {
       ...authorization_info,
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    await this.redisCache.setJsonAsync(
-      'authorizer_appid_' + authorizer_appid,
-      authorization_info
-    );
+    await this.backend.mset('authorizerAppidInfo', authorizer_appid, authorization_info);
+    // await this.redisCache.setJsonAsync(
+    //   'authorizer_appid_' + authorizer_appid,
+    //   authorization_info
+    // );
     debug('getInfoByAuthCode:', authorization_info);
     // need save to mongodb.
     ctx.body = authorization_info;
@@ -271,9 +289,10 @@ export default class Apis {
     else force = false;
     let needRefresh = true;
 
-    let authorization_info = await this.redisCache.getJsonAsync(
-      'authorizer_appid_' + appid
-    );
+    let authorization_info = await this.backend.mget('authorizerAppidInfo', appid);
+    // let authorization_info = await this.redisCache.getJsonAsync(
+    //   'authorizer_appid_' + appid
+    // );
     if (!authorization_info) {
       throw new Errcode(
         'error! no authorization_info for ' + appid,
@@ -314,10 +333,11 @@ export default class Apis {
       ...result,
       updatedAt: new Date()
     };
-    await this.redisCache.setJsonAsync(
-      'authorizer_appid_' + appid,
-      authorization_info
-    );
+    await this.backend.mset('authorizerAppidInfo', appid, authorization_info);
+    // await this.redisCache.setJsonAsync(
+    //   'authorizer_appid_' + appid,
+    //   authorization_info
+    // );
     debug('getAccessToken:', authorization_info);
     ctx.body = { token: authorization_info.authorizer_access_token };
   };
@@ -325,29 +345,32 @@ export default class Apis {
   ///////////////////////////////////////////////////
   // flow.
   ///////////////////////////////////////////////////
-  getComponentTicket = async () => {
-    let key = 'wxopen_ticket_' + this.cfg.appId;
-    let tickets = await this.redisCache.getAsync(key);
-    if (tickets) tickets = JSON.parse(tickets);
-    else tickets = [];
+  getComponentTicketCache = async () => {
+    let tickets = await this.backend.mget('wxopenTicket', this.cfg.appId) ||[];
+    // let key = 'wxopen_ticket_' + this.cfg.appId;
+    // let tickets = await this.redisCache.getAsync(key);
+    // if (tickets) tickets = JSON.parse(tickets);
+    // else tickets = [];
     if (!_.isArray(tickets)) tickets = [tickets];
     return tickets;
   };
 
-  updateComponentTicket = async ticketObj => {
-    let key = 'wxopen_ticket_' + this.cfg.appId;
-    let tickets = await this.getComponentTicket();
+  updateComponentTicketCache = async ticketObj => {
+    let tickets = await this.getComponentTicketCache();
     tickets = [ticketObj, ...tickets];
     tickets = tickets.slice(0, 2);
-    await this.redisCache.setAsync(key, JSON.stringify(tickets));
+    await this.backend.mset('wxopenTicket', this.cfg.appId, tickets);
+    // let key = 'wxopen_ticket_' + this.cfg.appId;
+    // await this.redisCache.setAsync(key, JSON.stringify(tickets));
     return tickets;
   };
 
   getComponentAccessToken = async () => {
     // 1. 获取旧的token
-    let key = 'wxopen_token_' + this.cfg.appId;
-    let token = await this.redisCache.getAsync(key);
-    if (token) token = JSON.parse(token);
+    let token = await this.backend.mget('wxopenToken', this.cfg.appId);
+    // let key = 'wxopen_token_' + this.cfg.appId;
+    // let token = await this.redisCache.getAsync(key);
+    // if (token) token = JSON.parse(token);
 
     // 2. 判断token是否过期
     let needNewToken = true;
@@ -362,20 +385,14 @@ export default class Apis {
     // 3. 获取新token
     if (needNewToken) {
       // 3.1. 获取tickets
-      let tickets = await this.getComponentTicket();
+      let tickets = await this.getComponentTicketCache();
       if (!tickets) {
-        throw new Errcode(
-          'no tickets in redis cache.',
-          EC.ERR_WXOPEN_TICKETS_NONE
-        );
+        throw new Errcode('no tickets found!', EC.ERR_WXOPEN_TICKETS_NONE);
       }
       let ticket1 = tickets[0] && tickets[0].ComponentVerifyTicket;
       let ticket2 = tickets[1] && tickets[1].ComponentVerifyTicket;
       if (!ticket1 && !ticket2) {
-        throw new Errcode(
-          'wrong tickets in redis cache.',
-          EC.ERR_WXOPEN_TICKETS_NONE
-        );
+        throw new Errcode('wrong tickets!', EC.ERR_WXOPEN_TICKETS_NONE);
       }
       // 3.2. 根据ticket1获取token
       let token1 = await this.wxopenApi.api_component_token(ticket1);
@@ -384,13 +401,14 @@ export default class Apis {
       }
       if (token1) {
         token1 = { ...token1, createdAt: new Date() };
-        debug('getComponentAccessToken, update token', token1);
-        await this.redisCache.setAsync(key, JSON.stringify(token1));
         token = token1;
+        // debug('getComponentAccessToken, update token', token);
+        // await this.redisCache.setAsync(key, JSON.stringify(token));
+        await this.backend.mset('wxopenToken', this.cfg.appId, token);
       }
     }
     if (!token) {
-      throw new Errcode('not get token.', EC.ERR_WXOPEN_TICKETS_NONE);
+      throw new Errcode('not get token!', EC.ERR_WXOPEN_TICKETS_NONE);
     }
     // 返回token
     return token;
