@@ -76,7 +76,7 @@ export const getAccessTokenMp = async args => {
   }
   let mpCfg = await backend.mget('mp', appid);
   if (mpCfg) {
-    debug('getAccessTokenMp:', appid, mpCfg);
+    debug('getAccessTokenMp mp in cache:', appid, mpCfg);
     secret = mpCfg.secret;
   }
 

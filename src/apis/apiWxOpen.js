@@ -6,32 +6,18 @@ import CommonRouterFix from './commonRouter';
 // import RedisCache from '../utils/redisCacheV2';
 import createBackend from '../lib/backend';
 import parseUserAgent from '../utils/userAgent';
-import WxopenMsg from '../lib/openMessage';
+import { middleware } from '../lib/openMessage';
 import {
   getAuthUrl,
   getInfoByAuthCode,
   getAccessToken,
   updateComponentTicketCache
 } from './svcOpen';
+import config from '../config';
 
-/**
- * redis 布局:
- * {
- *  wxopen_ticket_{openid}: 微信开放平台第三方平台的wxopen_ticket.微信每10分钟发一次.
- *  wxopen_token_{openid}: component_access_token,第三方平台的token.
- *  auth_code_{auth_code}: 存放authorizer_appid
- *  authorizer_appid_{openid}: 某个授权公众号的信息,包含access_token, refresh_token, 授权信息列表
- * }
- */
 export default class Apis {
-  constructor(app, cfg = {}) {
+  constructor(app) {
     this.app = app;
-    this.cfg = cfg;
-    // this._access_token = null;
-    // this._pre_auth_code = null;
-
-    // let url = cfg && cfg.backend && cfg.backend.url;
-    // this.redisCache = new RedisCache(url);
 
     this.init();
     this.registerServices();
@@ -39,14 +25,18 @@ export default class Apis {
 
   init = () => {
     debug('init wx open');
-    this.backend = createBackend(this.cfg.backend);
+    this.backend = createBackend(config.backend);
 
-    this.wxopen = new WxopenMsg({
-      token: this.cfg.token,
-      appid: this.cfg.appId,
-      encodingAESKey: this.cfg.encodingAESKey
+    // this.wxopen = new WxopenMsg({
+    //   token: this.cfg.token,
+    //   appid: this.cfg.appId,
+    //   encodingAESKey: this.cfg.encodingAESKey
+    // });
+    this.msgFunc = middleware({
+      token: config.token,
+      appid: config.appId,
+      encodingAESKey: config.encodingAESKey
     });
-    this.msgFunc = this.wxopen.middleware();
   };
 
   registerServices() {

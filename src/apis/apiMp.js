@@ -3,6 +3,7 @@ const debug = _debug('app:apiMp');
 import Errcode, { EC } from '../Errcode';
 import CommonRouterFix from './commonRouter';
 import { getAccessTokenMp, registerAppid } from './svcMp';
+import config from '../config';
 
 /**
  * redis: {
@@ -10,9 +11,8 @@ import { getAccessTokenMp, registerAppid } from './svcMp';
  * }
  */
 export default class Apis {
-  constructor(app, cfg) {
+  constructor(app) {
     this.app = app;
-    this.cfg = cfg;
 
     this.init();
     this.registerServices();
@@ -57,8 +57,8 @@ export default class Apis {
    */
   getAccessTokenMp = async (ctx, next) => {
     let cfg = {
-      appid: this.cfg.appId,
-      secret: this.cfg.appSecret
+      appid: config.appId,
+      secret: config.appSecret
     };
 
     let args = { ...ctx.request.body, ...ctx.request.query };

@@ -5,7 +5,6 @@ import Koa from 'koa';
 import convert from 'koa-convert';
 import cors from 'koa2-cors';
 import parseUserAgent from './utils/userAgent';
-import config from './config';
 
 let packageJson = require('../package.json');
 debug('SOFTWARE VERSION:', packageJson.name, packageJson.version);
@@ -66,11 +65,11 @@ app.use(async (ctx, next) => {
 
 //open-accesstoken
 let WxOpenApis = require('./apis/apiWxOpen').default;
-app.wxopen = new WxOpenApis(app, config);
+app.wxopen = new WxOpenApis(app);
 
 // mp-accesstoken.
 let WxMpApis = require('./apis/apiMp').default;
-app.wxmp = new WxMpApis(app, config);
+app.wxmp = new WxMpApis(app);
 
 app.use((ctx, next) => {
   debug('not done! [' + ctx.method + ' ' + ctx.path + ']');

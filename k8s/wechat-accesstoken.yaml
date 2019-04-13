@@ -8,13 +8,16 @@ metadata:
   namespace: default
 spec:
   ports:
-  - name: wechat-accesstoken-port-80
+  - name: wechat-accesstoken-http
     port: 80
     targetPort: 3310
     protocol: TCP
+  - name: wechat-accesstoken-jsonrpc
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
   selector:
     k8s-app: wechat-accesstoken
-
 ---
 apiVersion: apps/v1
 kind: Deployment
