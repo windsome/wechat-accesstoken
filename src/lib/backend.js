@@ -14,7 +14,7 @@ export class BackendMemory {
       data[main][sub] = value;
       resolve(value);
     });
-  }
+  };
   mget = (main, sub) => {
     return new Promise((resolve, reject) => {
       let data = BackendMemory.data;

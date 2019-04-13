@@ -1,10 +1,8 @@
 import _debug from 'debug';
 const debug = _debug('app:apiMp');
-import _ from 'lodash';
 import Errcode, { EC } from '../Errcode';
 import CommonRouterFix from './commonRouter';
-import MpAuth from '../lib/mpAuth';
-import createBackend from '../lib/backend';
+import { getAccessTokenMp } from './svcMp';
 
 /**
  * redis: {
@@ -21,12 +19,6 @@ export default class Apis {
   }
 
   init = () => {
-
-    this.backend = createBackend(this.cfg.backend);
-    // let url = this.cfg && this.cfg.backend && this.cfg.backend.url;
-    // this.redisCache = new RedisCache(url);
-
-    this.mpAuth = new MpAuth(this.cfg);
     debug('init wxmp');
   };
 
@@ -50,6 +42,12 @@ export default class Apis {
    * @apiName getAccessTokenMp
    * @apiGroup wxopen
    * @apiVersion 1.0.0
+   * @apiParamExample {json} Request-Example:
+   * {
+   *  appid,
+   *  secret,
+   *  force: true // 默认为空,表示不强制.
+   * }
    * @apiSuccessExample {json} Success-Response:
    * HTTP/1.1 200 OK
    * {
@@ -57,64 +55,18 @@ export default class Apis {
    * }
    */
   getAccessTokenMp = async (ctx, next) => {
-    let appid = this.cfg.appId;
-    if (!appid) {
-      throw new Errcode('error! this.cfg.appId is null!', EC.ERR_PARAM_ERROR);
-    }
+    let cfg = {
+      appid: this.cfg.appId,
+      secret: this.cfg.appSecret
+    };
+
+    let args = { ...ctx.request.body, ...ctx.request.query };
     let APPID = ctx.params.APPID;
     if (APPID) {
-      if (appid != APPID) {
-        throw new Errcode(
-          'error! APPID!=this.cfg.appId is null!',
-          EC.ERR_PARAM_ERROR
-        );
-      }
+      args['appid'] = APPID;
     }
 
-    let { force = false } = ctx.query || {};
-    if (force === 'true') force = true;
-    else force = false;
-    let needRefresh = true;
-    // debug('getAccessTokenMp', { force, needRefresh, appid, n: force == true });
-
-    let accessTokenInfo = await this.backend.mget('accessTokenMp', appid);
-
-    if (!force) {
-      // 判断appid对应的info是否过期
-      if (accessTokenInfo) {
-        let { expires_in, updatedAt } = accessTokenInfo;
-        let expired =
-          new Date(updatedAt).getTime() + expires_in * 1000 - 600000;
-        let current = new Date();
-        if (current < expired) {
-          // 没有过期.
-          needRefresh = false;
-        }
-      }
-    }
-    if (!needRefresh) {
-      ctx.body = { token: accessTokenInfo.access_token };
-      return;
-    }
-
-    let result = await this.mpAuth.token(appid, this.cfg.appSecret);
-    if (!result) {
-      throw new Errcode('api token fail!', EC.ERR_3RD_API_FAIL);
-    }
-    if (result.errcode) {
-      throw new Errcode(
-        'errcode=' + result.errcode + ',errmsg=' + result.errmsg,
-        EC.ERR_3RD_API_FAIL
-      );
-    }
-    accessTokenInfo = {
-      createdAt: new Date(),
-      ...accessTokenInfo,
-      ...result,
-      updatedAt: new Date()
-    };
-    await this.backend.mset('accessTokenMp', appid, accessTokenInfo)
-    debug('getAccessTokenMp:', accessTokenInfo);
-    ctx.body = { token: accessTokenInfo.access_token };
+    let token = await getAccessTokenMp({ ...cfg, ...args });
+    ctx.body = { accessToken: token };
   };
 }

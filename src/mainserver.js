@@ -3,9 +3,9 @@ const debug = _debug('app:mainserver');
 import 'isomorphic-fetch';
 import Koa from 'koa';
 import convert from 'koa-convert';
-import fs from 'fs';
 import cors from 'koa2-cors';
 import parseUserAgent from './utils/userAgent';
+import config from './config';
 
 let packageJson = require('../package.json');
 debug('SOFTWARE VERSION:', packageJson.name, packageJson.version);
@@ -64,25 +64,14 @@ app.use(async (ctx, next) => {
   }
 });
 
-let config = null;
-try {
-  const base_cfg_folder = '/data/wechat-accesstoken/config/';
-  config = JSON.parse(fs.readFileSync( base_cfg_folder+'config.json'));
-} catch (error) {
-  debug('error!', error);
-}
-if (!config) {
-  debug ('fatal error! no config!');
+if (config.env === 'open') {
+  let WxOpenApis = require('./apis/apiWxOpen').default;
+  app.wxopen = new WxOpenApis(app, config);
+} else if (config.env === 'mp') {
+  let WxMpApis = require('./apis/apiMp').default;
+  app.wxmp = new WxMpApis(app, config);
 } else {
-  if (config.env === 'open') {
-    let WxOpenApis = require('./apis/apiWxOpen').default;
-    app.wxopen = new WxOpenApis(app, config);
-  } else if (config.env === 'mp') {
-    let WxMpApis = require('./apis/apiMp').default;
-    app.wxmp = new WxMpApis(app, config);
-  } else {
-    debug('not support config!', config);
-  }
+  debug('not support config!', config);
 }
 
 app.use((ctx, next) => {
