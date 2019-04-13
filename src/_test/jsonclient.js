@@ -5,7 +5,7 @@ const client = jayson.client.http({
 });
 
 const reqs = [
-  client.request('accessToken', [true]),
+  client.request('accessToken', [{ force: true }]),
   client.request('rejection', []),
   client.request('getAuthUrl', [{ type: 'mobile' }])
 ];

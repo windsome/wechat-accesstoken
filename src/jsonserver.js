@@ -10,7 +10,7 @@ import config from './config';
 
 // jsonrpc function wrapper
 let rpcFuncWrap = (func, server) => args => {
-  return func(args).catch(error => {
+  return func(...args).catch(error => {
     debug('error!', error);
     // let errcode = error.errcode || -1;
     // let message = error.message || 'system error';
