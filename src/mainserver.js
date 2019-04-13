@@ -64,15 +64,13 @@ app.use(async (ctx, next) => {
   }
 });
 
-if (config.env === 'open') {
-  let WxOpenApis = require('./apis/apiWxOpen').default;
-  app.wxopen = new WxOpenApis(app, config);
-} else if (config.env === 'mp') {
-  let WxMpApis = require('./apis/apiMp').default;
-  app.wxmp = new WxMpApis(app, config);
-} else {
-  debug('not support config!', config);
-}
+//open-accesstoken
+let WxOpenApis = require('./apis/apiWxOpen').default;
+app.wxopen = new WxOpenApis(app, config);
+
+// mp-accesstoken.
+let WxMpApis = require('./apis/apiMp').default;
+app.wxmp = new WxMpApis(app, config);
 
 app.use((ctx, next) => {
   debug('not done! [' + ctx.method + ' ' + ctx.path + ']');

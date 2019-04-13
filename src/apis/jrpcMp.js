@@ -1,6 +1,6 @@
 import _debug from 'debug';
 const debug = _debug('app:jrpcMp');
-import { getAccessTokenMp } from './svcMp';
+import { getAccessTokenMp, registerAppid } from './svcMp';
 
 /**
  * redis: {
@@ -25,7 +25,9 @@ export default class Apis {
 
   getServices() {
     return {
-      accessToken: this.getAccessTokenMp
+      accessToken: this.getAccessTokenMp,
+      getMpAccessTokenByAppid: getAccessTokenMp,
+      registerAppid: registerAppid
     };
   }
 

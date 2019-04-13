@@ -9,6 +9,9 @@ import config from '../config';
 let backend = createBackend(config.backend);
 /**
  * redis: {
+ *  mp: {
+ *    <appid1>: { ... },
+ *  }
  *  accessTokenMp: {
  *    <appid1>: { ... },
  *  }
@@ -16,7 +19,39 @@ let backend = createBackend(config.backend);
  */
 
 /**
- * @api {JSONRPC} accessToken[?force=true] 获取公众号access_token
+ * @api {GET} registerAppid 注册公众号相关信息
+ * @apiDescription 注册公众号或小程序,可理解为更新配置信息<br/>
+ * @apiName registerAppid
+ * @apiGroup svcMp
+ * @apiVersion 1.0.0
+ * @apiParamExample {json} Request-Example:
+ * {
+ *  appid: 'xxxx',
+ *  secret: 'xxxx',
+ * }
+ * @apiSuccessExample {json} Success-Response:
+ * {
+ *  token
+ * }
+ */
+export const registerAppid = async args => {
+  let appid = args.appid;
+  let secret = args.secret;
+  if (!appid || !secret) {
+    throw new Errcode('error! no appid/secret!', EC.ERR_PARAM_ERROR);
+  }
+
+  await backend.mset('mp', appid, args);
+
+  let mpCfg = await backend.mget('mp', appid);
+  debug('registerAppid:', appid, mpCfg);
+  await getAccessTokenMp(mpCfg);
+
+  return true;
+};
+
+/**
+ * @api {GET} accessToken[?force=true] 获取公众号access_token
  * @apiDescription 获取access_token,非第三方方式<br/>
  * @apiName getAccessTokenMp
  * @apiGroup svcMp
@@ -33,12 +68,16 @@ let backend = createBackend(config.backend);
  * }
  */
 export const getAccessTokenMp = async args => {
-  debug('getAccessTokenMp:', args);
   let force = args.force;
   let appid = args.appid;
   let secret = args.secret;
-  if (!appid || !secret) {
-    throw new Errcode('error! no appid/secret!', EC.ERR_PARAM_ERROR);
+  if (!appid) {
+    throw new Errcode('error! no appid!', EC.ERR_PARAM_ERROR);
+  }
+  let mpCfg = await backend.mget('mp', appid);
+  if (mpCfg) {
+    debug('getAccessTokenMp:', appid, mpCfg);
+    secret = mpCfg.secret;
   }
 
   let typeforce = type(force);
@@ -88,6 +127,5 @@ export const getAccessTokenMp = async args => {
     updatedAt: new Date()
   };
   await backend.mset('accessTokenMp', appid, accessTokenInfo);
-  debug('getAccessTokenMp:', accessTokenInfo);
   return accessTokenInfo.access_token;
 };

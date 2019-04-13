@@ -10,6 +10,12 @@ const reqs = [
   client.request('getAuthUrl', [{ type: 'mobile' }])
 ];
 
+const reqs = [
+  client.request('getMpAccessTokenByAppid', [{ appid: 'wxfb8d1a55dbb25611' }])
+  // client.request('accessToken', [{ force: true }]),
+  // client.request('registerAppid', [{ appid: 'wxfb8d1a55dbb25611', secret: '11111111111111111' }]),
+];
+
 Promise.all(reqs).then(function(responses) {
   console.log(responses);
   // console.log(responses[1]);

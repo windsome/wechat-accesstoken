@@ -2,7 +2,7 @@ import _debug from 'debug';
 const debug = _debug('app:apiMp');
 import Errcode, { EC } from '../Errcode';
 import CommonRouterFix from './commonRouter';
-import { getAccessTokenMp } from './svcMp';
+import { getAccessTokenMp, registerAppid } from './svcMp';
 
 /**
  * redis: {
@@ -26,8 +26,9 @@ export default class Apis {
     // init router for apis.
     let prefix = '/apis/v1/wx/mp';
     let router = require('koa-router')({ prefix });
+    router.post('/register_appid', this.registerAppid);
     router.get('/access_token', this.getAccessTokenMp);
-    router.get('/access_token/:APPID', this.getAccessTokenMp);
+    router.get('/access_token/:APPID', this.getAccessTokenByAppid);
 
     CommonRouterFix(this.app, router, prefix);
   }
@@ -67,6 +68,24 @@ export default class Apis {
     }
 
     let token = await getAccessTokenMp({ ...cfg, ...args });
+    ctx.body = { accessToken: token };
+  };
+
+  registerAppid = async (ctx, next) => {
+    let args = { ...ctx.request.body, ...ctx.request.query };
+
+    let result = await registerAppid(args);
+    ctx.body = { result };
+  };
+
+  getAccessTokenByAppid = async (ctx, next) => {
+    let args = { ...ctx.request.body, ...ctx.request.query };
+    let APPID = ctx.params.APPID;
+    if (APPID) {
+      args['appid'] = APPID;
+    }
+
+    let token = await getAccessTokenMp(args);
     ctx.body = { accessToken: token };
   };
 }
