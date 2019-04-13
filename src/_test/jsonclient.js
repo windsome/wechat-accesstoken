@@ -3,6 +3,7 @@ let jayson = require('jayson/promise');
 const client = jayson.client.http({
   port: 8000
 });
+const client2 = jayson.client.http('http://localhost:8000');
 
 const reqs = [
   client.request('accessToken', [{ force: true }]),
